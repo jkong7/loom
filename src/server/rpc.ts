@@ -50,6 +50,10 @@ export async function runRpc(rt: Runtime, broker: PermissionBroker, initial: Age
           reply({ ok: true });
           break;
         case 'compact':
+          if (agent.isRunning) {
+            reply({ ok: false, error: 'busy; compaction runs automatically between turns' });
+            break;
+          }
           reply({ ok: true, ...(await agent.compact({ reason: 'manual', instructions: cmd.instructions })) });
           break;
         case 'permission_response':

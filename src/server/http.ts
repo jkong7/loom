@@ -132,8 +132,10 @@ export class LoomServer {
         agent.steer(String((await body(req)).text ?? ''));
         return send(res, 200, { ok: true });
       }
+      if (action === 'undo' && req.method === 'POST' && agent.isRunning) return send(res, 409, { error: 'session is busy' });
       if (action === 'undo' && req.method === 'POST') return send(res, 200, (await agent.undo()) ?? { nothing: true });
       if (action === 'compact') {
+        if (agent.isRunning) return send(res, 409, { error: 'session is busy; compaction runs automatically between turns' });
         const b = await body(req);
         return send(res, 200, await agent.compact({ reason: 'manual', instructions: b.instructions }));
       }

@@ -40,7 +40,17 @@ export class Tui {
     this.renderer = new TextRenderer(process.stdout, verbose);
   }
 
+  private askChain: Promise<unknown> = Promise.resolve();
+
   asker = (req: PermissionRequest): Promise<PermissionAnswer> => {
+    const next = this.askChain.then(() => (this.aborted ? ('deny' as const) : this.askOne(req)));
+    this.askChain = next.catch(() => {});
+    return next;
+  };
+
+  private aborted = false;
+
+  private askOne = (req: PermissionRequest): Promise<PermissionAnswer> => {
     const what = req.target.kind === 'execute' ? `run ${c.bold(String(req.target.subject))}` : req.target.paths?.length ? `${req.tool} ${c.bold(req.target.paths.join(', '))}` : `${req.tool} ${c.bold(String(req.target.subject ?? JSON.stringify(req.args).slice(0, 120)))}`;
     process.stdout.write(`\n${c.yellow('?')} Allow ${what} ${c.gray(`(${req.reason})`)}\n  ${c.bold('y')}es / ${c.bold('n')}o / ${c.bold('a')}lways this session: `);
     return new Promise((resolve) => {
@@ -85,9 +95,15 @@ export class Tui {
       this.question = null;
       process.stdout.write('\n');
       q('n');
+      if (this.running) {
+        this.aborted = true;
+        this.agent.abort();
+        process.stdout.write(c.yellow('[interrupted]\n'));
+      }
       return;
     }
     if (this.running) {
+      this.aborted = true;
       this.agent.abort();
       process.stdout.write(c.yellow('\n[interrupted]\n'));
       return;
@@ -122,6 +138,7 @@ export class Tui {
       return;
     }
     this.running = true;
+    this.aborted = false;
     try {
       const r = await this.agent.prompt(line);
       if (r.reason !== 'done') process.stdout.write(c.gray(`[${r.reason}${r.error ? `: ${r.error}` : ''}]\n`));
