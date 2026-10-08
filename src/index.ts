@@ -8,3 +8,4 @@ export { Runtime, type RuntimeOptions, type NewAgentOptions } from './runtime.ts
 export { loadConfig, loomHome, type LoomConfig } from './config.ts';
 export { type Plugin, type PluginApi } from './plugins.ts';
 export { LoomServer, PermissionBroker } from './server/http.ts';
+export * from './telemetry/index.ts';
