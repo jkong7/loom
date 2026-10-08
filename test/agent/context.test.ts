@@ -91,21 +91,27 @@ test('overflow errors trigger compaction and a retry', async () => {
   assert.equal(script.calls.length, 4);
 });
 
-test('pruning replaces old tool outputs and strips earlier thinking instead of a full compaction', async () => {
-  const big = 'x'.repeat(30000);
+test('pruning happens between prompts: old tool outputs are replaced and earlier thinking is stripped', async () => {
+  const big = 'x'.repeat(18000);
   const tool: Tool<{ text: string }> = { ...echoTool(), execute: async () => big };
   const steps: any[] = [];
-  for (let i = 0; i < 4; i++) steps.push({ thinking: 'hmm', toolCalls: [{ name: 'echo', args: { text: String(i) } }] });
-  steps.push({ text: 'done' });
-  const { agent, script, events } = makeAgent(steps, { tools: new ToolRegistry().register(tool), toolOutputMaxChars: 100000, contextWindow: 40000, compaction: { pruneProtectTokens: 9000, pruneMinSavings: 5000, reserveTokens: 2000 } });
-  const r = await agent.prompt('go');
-  assert.equal(r.text, 'done');
+  for (let i = 0; i < 4; i++) steps.push({ thinking: 'hmm', toolCalls: [{ name: 'echo', args: { text: String(i) } }] }, { text: `done ${i}` });
+  steps.push({ thinking: 'fresh', toolCalls: [{ name: 'echo', args: { text: 'last' } }] }, { text: 'final' });
+  const { agent, script, events } = makeAgent(steps, { tools: new ToolRegistry().register(tool), toolOutputMaxChars: 100000, contextWindow: 40000, compaction: { thresholdRatio: 0.6, pruneProtectTokens: 9000, pruneMinSavings: 5000, reserveTokens: 2000 } });
+  for (let i = 0; i < 4; i++) await agent.prompt(`step ${i}`);
+  const r = await agent.prompt(`wrap up ${'context '.repeat(1500)}`);
+  assert.equal(r.text, 'final');
   assert.ok(events.some((e) => e.type === 'compaction' && e.phase === 'prune'));
   assert.equal(agent.session.latestCompaction(), undefined);
   const last = script.calls.at(-1)!;
   const tools = last.messages.filter((m) => m.role === 'tool').map((m) => (m.content[0] as any).text);
   assert.ok(tools.includes(PRUNED_MARKER));
   assert.ok(tools.at(-1)!.length > 1000);
+  const thinking = last.messages.filter((m) => m.role === 'assistant').map((m) => (m as any).content.some((c: any) => c.type === 'thinking'));
+  assert.equal(thinking.at(-1), true);
+  assert.equal(thinking[0], false);
+  const raw = agent.session.messages().filter((m) => m.role === 'tool').map((m) => (m.content[0] as any).text);
+  assert.ok(raw.every((t) => t !== PRUNED_MARKER));
 });
 
 test('sessions resume from disk and fork into a new file', async () => {

@@ -187,3 +187,17 @@ test('follow-up queue runs after the current prompt finishes', async () => {
   assert.equal(r.text, 'second');
   assert.equal(script.calls.length, 2);
 });
+
+test('queued steering and follow-ups are dropped when a run ends badly', async () => {
+  let agentRef: any;
+  const tool: Tool<{ text: string }> = { ...echoTool(), execute: async () => (agentRef.steer('late steer'), agentRef.followUp('late follow-up'), 'x') };
+  const { agent, script, events } = makeAgent([{ toolCalls: [{ name: 'echo', args: { text: 'x' } }] }, { error: 'boom' }, { text: 'clean' }], { tools: new ToolRegistry().register(tool) });
+  agentRef = agent;
+  const r1 = await agent.prompt('first');
+  assert.equal(r1.reason, 'error');
+  assert.ok(events.some((e) => e.type === 'notice' && /dropped 1 queued/.test(e.text)));
+  const r2 = await agent.prompt('second');
+  assert.equal(r2.text, 'clean');
+  assert.equal(script.calls.length, 3);
+  assert.ok(!JSON.stringify(script.calls.at(-1)!.messages).includes('late follow-up'));
+});

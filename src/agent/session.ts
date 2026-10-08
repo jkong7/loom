@@ -257,6 +257,12 @@ export class Session {
     return undefined;
   }
 
+  usageBoundary(): number {
+    const b = this.branch();
+    for (let i = b.length - 1; i >= 0; i--) if (b[i].type === 'compaction' || b[i].type === 'prune') return Date.parse(b[i].ts);
+    return 0;
+  }
+
   contextMessages(): Message[] {
     const b = this.branch();
     let start = 0;
@@ -287,7 +293,10 @@ export class Session {
       }
     });
     if (pruned.size) {
-      for (const m of out) if (m.role === 'tool' && pruned.has(m.toolCallId)) Object.assign(m, prunedResult(m));
+      for (let i = 0; i < out.length; i++) {
+        const m = out[i];
+        if (m.role === 'tool' && pruned.has(m.toolCallId)) out[i] = prunedResult(m);
+      }
     }
     tail.forEach((e, i) => {
       if (e.type !== 'message') return;

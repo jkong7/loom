@@ -29,11 +29,11 @@ export function usageTotal(m: AssistantMessage): number {
   return u.input + u.cacheRead + u.cacheWrite + u.output;
 }
 
-export function contextTokens(messages: Message[], baseline: number): number {
+export function contextTokens(messages: Message[], baseline: number, usableSince = 0): number {
   let lastIdx = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m.role === 'assistant' && m.stopReason !== 'error' && m.stopReason !== 'aborted' && usageTotal(m) > 0) {
+    if (m.role === 'assistant' && m.ts >= usableSince && m.stopReason !== 'error' && m.stopReason !== 'aborted' && usageTotal(m) > 0) {
       lastIdx = i;
       break;
     }

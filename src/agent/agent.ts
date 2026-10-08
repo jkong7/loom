@@ -105,7 +105,7 @@ export class Agent {
     this.model = opts.model;
     this.registry = opts.registry;
     this.session = opts.session;
-    this.tools = opts.tools;
+    this.tools = opts.tools.filter(() => true);
     this.permissions = opts.permissions;
     this.hooks = opts.hooks ?? new HookBus();
     this.memory = opts.memory;
@@ -160,7 +160,7 @@ export class Agent {
     this.started = true;
     if (this.memory) {
       await this.memory.initialize(this.memoryInfo(source));
-      for (const t of this.memory.tools()) if (!this.tools.has(t.name)) this.tools.register(t);
+      for (const t of this.memory.tools()) this.tools.register(t);
     }
     const hook = await this.hooks.emit(this.hookInput('SessionStart', { source }));
     this.freezeContext(hook.additionalContext);
@@ -194,7 +194,7 @@ export class Agent {
   }
 
   contextTokens(): number {
-    return contextTokens(this.session.contextMessages(), this.systemTokens);
+    return contextTokens(this.session.contextMessages(), this.systemTokens, this.session.usageBoundary());
   }
 
   setModel(model: Model): void {
@@ -286,7 +286,7 @@ export class Agent {
       }
       turns++;
       this.emit({ type: 'turn_start', turn: turns });
-      await this.maybeCompact(signal);
+      await this.maybeCompact(signal, turns === 1);
 
       const assistant = await this.callModel(signal);
       usage = addUsage(usage, assistant.usage);
@@ -344,6 +344,12 @@ export class Agent {
   }
 
   private finish(r: RunResult): RunResult {
+    if (r.reason !== 'done') {
+      const dropped = this.steering.length + this.followUps.length;
+      this.steering = [];
+      this.followUps = [];
+      if (dropped) this.emit({ type: 'notice', level: 'warn', text: `dropped ${dropped} queued message(s) because the run ended with ${r.reason}` });
+    }
     this.emit({ type: 'agent_end', reason: r.reason, message: r.message, usage: r.usage, turns: r.turns });
     return r;
   }
@@ -464,11 +470,11 @@ export class Agent {
     return done(result);
   }
 
-  private async maybeCompact(signal: AbortSignal): Promise<void> {
+  private async maybeCompact(signal: AbortSignal, atRunStart: boolean): Promise<void> {
     const tokens = this.contextTokens();
     if (!shouldCompact(tokens, this.model, this.compaction)) return;
     const threshold = compactionThreshold(this.model, this.compaction);
-    const prune = planPrune(this.session.contextMessages(), this.compaction);
+    const prune = atRunStart ? planPrune(this.session.contextMessages(), this.compaction) : { ids: [], saved: 0 };
     if (prune.ids.length && prune.saved >= this.compaction.pruneMinSavings && tokens - prune.saved < threshold * 0.8) {
       this.session.appendPrune(prune.ids, prune.saved);
       this.emit({ type: 'compaction', phase: 'prune', reason: 'threshold', tokensBefore: tokens, tokensAfter: tokens - prune.saved });
