@@ -1,0 +1,24 @@
+{
+  "name": "loom-agent",
+  "version": "0.1.0",
+  "description": "A reusable, model-agnostic agent harness: core SDK, CLI, TUI and headless server, with pluggable memory (engram first)",
+  "type": "module",
+  "private": true,
+  "bin": { "loom": "bin/loom.js" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./ai": "./src/ai/index.ts",
+    "./agent": "./src/agent/index.ts",
+    "./memory": "./src/memory/index.ts"
+  },
+  "engines": { "node": ">=23.6" },
+  "scripts": {
+    "test": "node --test --test-concurrency=4 'test/**/*.test.ts'",
+    "typecheck": "tsc -p tsconfig.json",
+    "loom": "node src/cli/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.0"
+  }
+}
