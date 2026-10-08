@@ -44,6 +44,10 @@ export class MemoryManager {
     this.providers.push(p);
   }
 
+  names(): string[] {
+    return this.active.map((p) => p.name);
+  }
+
   get enabled(): boolean {
     return this.active.length > 0;
   }

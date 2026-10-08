@@ -15,6 +15,8 @@ import type { MemoryManager } from '../memory/manager.ts';
 import type { AgentContextKind, MemorySessionInfo } from '../memory/provider.ts';
 import { findGitRoot } from './instructions.ts';
 import type { Snapshots } from './snapshots.ts';
+import type { Tracer } from '../telemetry/otel.ts';
+import { activeSpan, withSpan } from '../telemetry/context.ts';
 
 export type AgentEvent =
   | { type: 'agent_start'; sessionId: string }
@@ -66,6 +68,8 @@ export interface AgentOptions {
   services?: Record<string, unknown>;
   stopHookLimit?: number;
   snapshots?: Snapshots;
+  tracer?: Tracer;
+  agentName?: string;
 }
 
 type Listener = (e: AgentEvent) => void;
@@ -240,6 +244,22 @@ export class Agent {
   }
 
   private async run(input: string | UserContent[], external?: AbortSignal): Promise<RunResult> {
+    const tracer = this.opts.tracer;
+    if (!tracer) return this.runBody(input, external);
+    const span = tracer.startRun({ sessionId: this.session.id, prompt: typeof input === 'string' ? input : textOf(input), model: this.model, agentName: this.opts.agentName ?? (this.opts.depth ? 'subagent' : 'loom'), depth: this.opts.depth ?? 0, cwd: this.cwd });
+    try {
+      const r = await withSpan(span.context, () => this.runBody(input, external));
+      tracer.endRun(span, r);
+      void tracer.flush();
+      return r;
+    } catch (err) {
+      span.end((err as Error).message);
+      void tracer.flush();
+      throw err;
+    }
+  }
+
+  private async runBody(input: string | UserContent[], external?: AbortSignal): Promise<RunResult> {
     await this.start();
     this.abortCtl = new AbortController();
     const signal = external ? AbortSignal.any([external, this.abortCtl.signal]) : this.abortCtl.signal;
@@ -255,7 +275,13 @@ export class Agent {
     }
     const prefix: UserContent[] = [];
     if (this.memory?.enabled) {
-      const recall = await this.memory.prefetch(promptText, this.session.id, signal);
+      const mspan = this.opts.tracer?.startMemory(activeSpan(), 'prefetch', this.memory.names().join(',') || 'memory', this.session.id, promptText);
+      let recall: string | null = null;
+      try {
+        recall = await withSpan(mspan?.context, () => this.memory!.prefetch(promptText, this.session.id, signal));
+      } finally {
+        if (mspan) this.opts.tracer!.endMemory(mspan, recall);
+      }
       if (recall) {
         prefix.push({ type: 'text', text: recall, meta: 'memory' });
         this.emit({ type: 'memory', kind: 'recall', text: recall });
@@ -365,12 +391,27 @@ export class Agent {
       temperature: this.opts.temperature,
       sessionId: this.session.id,
     };
-    for await (const ev of stream(this.model, ctx, options, this.registry)) {
-      if (ev.type === 'start') this.emit({ type: 'message_start', message: ev.partial });
-      else if (ev.type === 'done' || ev.type === 'error') final = ev.message;
-      else this.emit({ type: 'message_update', event: ev });
+    const span = this.opts.tracer?.startLlm(activeSpan(), this.model, ctx, this.session.id, { maxTokens: options.maxTokens, temperature: options.temperature, reasoning: options.reasoning });
+    const t0 = Date.now();
+    let firstChunk: number | undefined;
+    try {
+      await withSpan(span?.context, async () => {
+        for await (const ev of stream(this.model, ctx, options, this.registry)) {
+          if (ev.type === 'start') this.emit({ type: 'message_start', message: ev.partial });
+          else if (ev.type === 'done' || ev.type === 'error') final = ev.message;
+          else {
+            if (firstChunk === undefined && (ev.type === 'text_delta' || ev.type === 'thinking_delta' || ev.type === 'toolcall_start')) firstChunk = Date.now() - t0;
+            this.emit({ type: 'message_update', event: ev });
+          }
+        }
+      });
+    } catch (err) {
+      span?.end((err as Error).message);
+      throw err;
     }
-    return final ?? { role: 'assistant', content: [], provider: this.model.provider, model: this.model.id, api: this.model.api, usage: emptyUsage(), stopReason: 'error', error: 'empty stream', ts: Date.now() };
+    const out: AssistantMessage = final ?? { role: 'assistant', content: [], provider: this.model.provider, model: this.model.id, api: this.model.api, usage: emptyUsage(), stopReason: 'error', error: 'empty stream', ts: Date.now() };
+    if (span) this.opts.tracer!.endLlm(span, out, firstChunk);
+    return out;
   }
 
   private toolMessage(call: ToolCallPart, r: ToolResult): ToolResultMessage {
@@ -423,9 +464,11 @@ export class Agent {
 
   private async runTool(call: ToolCallPart, signal: AbortSignal, recent: string[]): Promise<ToolResultMessage> {
     const started = Date.now();
+    const span = this.opts.tracer?.startTool(activeSpan(), call, this.session.id);
     this.emit({ type: 'tool_start', call });
     const done = (r: ToolResult) => {
       const msg = this.toolMessage(call, this.truncate(call, r));
+      if (span) this.opts.tracer!.endTool(span, msg);
       this.emit({ type: 'tool_end', call, result: msg, durationMs: Date.now() - started });
       return msg;
     };
@@ -459,7 +502,7 @@ export class Agent {
       onUpdate: (text) => this.emit({ type: 'tool_update', callId: call.id, text }),
     };
     try {
-      result = normalizeResult(await tool.execute(args, ctx));
+      result = normalizeResult(await withSpan(span?.context, () => tool.execute(args, ctx)));
     } catch (err) {
       result = textResult(`${call.name} failed: ${err instanceof Error ? err.message : String(err)}`, true);
     }
