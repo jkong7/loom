@@ -15,6 +15,7 @@ const SLASH_HELP = `Commands
   /sessions             recent sessions in this directory
   /resume <id>          switch to another session
   /fork                 fork the current session and continue in the copy
+  /undo                 restore files and conversation to before the last prompt
   /tools                list tools
   /skills               list skills
   /memory               memory provider status and the current digest
@@ -182,6 +183,11 @@ export class Tui {
           return this.swap(await this.rt.createAgent({ resume: arg }));
         case 'fork':
           return this.swap(await this.rt.createAgent({ fork: { session: this.agent.session.id } }));
+        case 'undo': {
+          const r = await this.agent.undo();
+          if (!r) return say('nothing to undo');
+          return say(`undid "${r.prompt.slice(0, 60)}": restored ${r.restored.length} file(s), removed ${r.removed.length} new file(s)${r.restored.length + r.removed.length ? `: ${[...r.restored, ...r.removed].slice(0, 8).join(', ')}` : ''}`);
+        }
         case 'tools':
           return say(this.agent.tools.list().map((t) => `${t.name} ${c.gray(`(${t.kind}${t.concurrent ? ', parallel' : ''})`)}`).join('\n'));
         case 'skills':

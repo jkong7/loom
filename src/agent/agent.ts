@@ -14,6 +14,7 @@ import { DEFAULT_COMPACTION, compactionThreshold, fallbackSummary, findCutIndex,
 import type { MemoryManager } from '../memory/manager.ts';
 import type { AgentContextKind, MemorySessionInfo } from '../memory/provider.ts';
 import { findGitRoot } from './instructions.ts';
+import type { Snapshots } from './snapshots.ts';
 
 export type AgentEvent =
   | { type: 'agent_start'; sessionId: string }
@@ -64,6 +65,7 @@ export interface AgentOptions {
   streamOptions?: Omit<StreamOptions, 'signal'>;
   services?: Record<string, unknown>;
   stopHookLimit?: number;
+  snapshots?: Snapshots;
 }
 
 type Listener = (e: AgentEvent) => void;
@@ -262,6 +264,10 @@ export class Agent {
     for (const ctx of hook.additionalContext) {
       if (/^\s*<memory-context[\s>]/.test(ctx)) prefix.push({ type: 'text', text: ctx, meta: 'memory' });
       else prefix.push({ type: 'text', text: reminder(ctx), meta: 'context' });
+    }
+    if (this.opts.snapshots && !this.opts.depth) {
+      const tree = this.opts.snapshots.take();
+      if (tree) this.session.appendCustom('snapshot', { tree });
     }
     const userMsg: UserMessage = { role: 'user', content: [...prefix, ...content], ts: Date.now() };
     this.append(userMsg);
@@ -519,6 +525,21 @@ export class Agent {
     this.freezeContext([...post.additionalContext, ...restart.additionalContext]);
     this.emit({ type: 'compaction', phase: 'end', reason, tokensBefore, tokensAfter, summary });
     return { summary, tokensBefore, tokensAfter };
+  }
+
+  async undo(): Promise<{ restored: string[]; removed: string[]; prompt: string } | null> {
+    if (this.running) throw new Error('cannot undo while running');
+    const branch = this.session.branch();
+    for (let i = branch.length - 1; i >= 0; i--) {
+      const e = branch[i];
+      if (e.type !== 'custom' || e.kind !== 'snapshot') continue;
+      const next = branch[i + 1];
+      const prompt = next && next.type === 'message' ? next.text : '';
+      const files = this.opts.snapshots ? this.opts.snapshots.restore((e.data as { tree: string }).tree) : { restored: [], removed: [] };
+      this.session.rewindTo(e.parentId);
+      return { ...files, prompt };
+    }
+    return null;
   }
 
   async close(reason = 'exit'): Promise<void> {

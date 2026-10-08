@@ -17,6 +17,7 @@ import type { MemoryProvider } from './memory/provider.ts';
 import { loadConfig, loomHome, type LoomConfig } from './config.ts';
 import { loadPlugins, pluginPaths, type Plugin, type PluginHost } from './plugins.ts';
 import { textOf } from './ai/types.ts';
+import { Snapshots } from './agent/snapshots.ts';
 
 export interface RuntimeOptions {
   cwd?: string;
@@ -199,6 +200,7 @@ export class Runtime {
       compactionModel: small,
       agentContext: opts.agentContext ?? 'primary',
       services: { sandbox: this.sandbox, spawnSubagent: this.spawner(() => agent) },
+      snapshots: this.config.snapshots === false ? undefined : new Snapshots(this.cwd, join(this.home, 'snapshots')),
       ...opts.extra,
     });
     this.agents.add(agent);

@@ -82,6 +82,10 @@ Sessions are stored at `~/.loom/sessions/<encoded-cwd>/<iso-time>_<session-id>.j
 - Fork: `loom --fork <id>` or `/fork` copies the active branch into a new file that records `forked_from`. `Session.rewindTo(entryId)` branches inside the same file.
 - Subagent runs are separate session files that carry `parent_session_id`.
 
+### Undo
+
+Before each top-level prompt, loom snapshots the working tree into a shadow git repo at `~/.loom/snapshots/<cwd>.git`. Your own `.git` is never touched. `.gitignore` is honored, and `node_modules`, build output and logs are excluded. `/undo` in the TUI, `Agent.undo()` or `POST /sessions/:id/undo` restores every file that changed since that snapshot, deletes files created since, and rewinds the conversation to before the prompt. It restores any change made during that window, including your own edits. Snapshots are off in the home directory and filesystem root; turn them off with `"snapshots": false`.
+
 ## Providers and models
 
 | Provider id | Protocol | Key |
@@ -228,6 +232,5 @@ The suite covers:
 - The model registry is hand-maintained. Prices and limits for non-Anthropic models are best effort, so check them before relying on cost numbers.
 - There is no Linux sandbox yet (bubblewrap or landlock), and no network allowlist proxy.
 - The TUI is readline-based: no diff view, no syntax highlighting, no multi-pane layout.
-- There are no git snapshots for undo; rewind only moves the conversation.
 - Gemini `thoughtSignature` on plain text parts is stored as an empty thinking block. That works, but it is not byte-for-byte what Gemini returned.
 - The text tool-call shim (used automatically when a model has `tools: false`, or with `compat.toolShim`) has been checked on qwen3:8b only. Weaker models may need a stricter output format.

@@ -132,6 +132,7 @@ export class LoomServer {
         agent.steer(String((await body(req)).text ?? ''));
         return send(res, 200, { ok: true });
       }
+      if (action === 'undo' && req.method === 'POST') return send(res, 200, (await agent.undo()) ?? { nothing: true });
       if (action === 'compact') {
         const b = await body(req);
         return send(res, 200, await agent.compact({ reason: 'manual', instructions: b.instructions }));

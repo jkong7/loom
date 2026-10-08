@@ -32,6 +32,7 @@ export interface LoomConfig {
   plugins?: string[];
   systemPrompt?: { base?: string; append?: string };
   tools?: { disabled?: string[] };
+  snapshots?: boolean;
 }
 
 export function loomHome(): string {
