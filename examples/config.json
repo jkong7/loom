@@ -1,0 +1,36 @@
+{
+  "model": "anthropic/claude-sonnet-5-5",
+  "smallModel": "anthropic/claude-haiku-5-5",
+  "reasoning": "medium",
+  "permissions": {
+    "mode": "default",
+    "allow": ["bash(npm test:*)", "bash(git status:*)", "bash(git diff:*)", "mcp__github__get_*"],
+    "deny": ["bash(git push:*)", "edit(.env)"]
+  },
+  "sandbox": { "mode": "seatbelt", "network": true },
+  "memory": {
+    "provider": "engram",
+    "recall": true,
+    "engram": { "url": "http://127.0.0.1:7432", "toolTransport": "auto" }
+  },
+  "compaction": { "thresholdRatio": 0.85, "keepRecentTokens": 20000 },
+  "providers": {
+    "ollama": { "baseUrl": "http://127.0.0.1:11434/v1" },
+    "work-gateway": { "api": "openai-chat", "baseUrl": "https://llm.example.internal/v1", "apiKeyEnv": ["WORK_LLM_KEY"] }
+  },
+  "models": [
+    { "provider": "ollama", "id": "qwen3:14b", "contextWindow": 40960, "maxOutput": 8192, "reasoning": true },
+    { "provider": "work-gateway", "id": "llama-4-maverick", "contextWindow": 1000000 }
+  ],
+  "aliases": { "local": "ollama/qwen3:14b" },
+  "mcpServers": {
+    "github": { "command": "github-mcp-server", "args": ["stdio"], "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" } }
+  },
+  "hooks": {
+    "PostToolUse": [
+      { "matcher": "edit|write", "hooks": [{ "type": "command", "command": "npx prettier --write \"$(jq -r .tool_input.path)\" >/dev/null 2>&1 || true" }] }
+    ]
+  },
+  "skills": { "paths": ["~/my-skills"] },
+  "plugins": ["./examples/plugin.ts"]
+}
