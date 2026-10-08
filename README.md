@@ -159,7 +159,7 @@ Each tool has a kind: read, edit, execute, network, mcp, agent, memory or other.
    - commands ask, unless they are recognized as read-only (`ls`, `git status`, `rg` and the like, with no redirects or chaining)
    - everything else asks
 
-Rules look like `bash(npm test:*)`, `edit(src/**)`, `mcp__github__*` or `kind:network`. With no approver attached (print mode, server mode with no client) a call that would ask is denied, and the model is told why. `--sandbox` (or `"sandbox": {"mode": "seatbelt"}`) runs every bash command under macOS `sandbox-exec`, which blocks writes outside the cwd and temp dirs and can block outbound network.
+Rules look like `bash(npm test:*)`, `edit(src/**)`, `mcp__github__*` or `kind:network`. With no approver attached (print mode, server mode with no client) a call that would ask is denied, and the model is told why. `--sandbox` (or `"sandbox": {"mode": "auto"}`) runs every bash command under macOS `sandbox-exec`, or under bubblewrap on Linux. Either one blocks writes outside the cwd and temp dirs, and both can block outbound network (`"network": false`).
 
 ## Hooks, skills, subagents, plugins, MCP
 
@@ -230,7 +230,7 @@ The suite covers:
 ## Limits and next steps
 
 - The model registry is hand-maintained. Prices and limits for non-Anthropic models are best effort, so check them before relying on cost numbers.
-- There is no Linux sandbox yet (bubblewrap or landlock), and no network allowlist proxy.
+- The bubblewrap path has only been exercised in argument-construction tests, not on a real Linux host. There is no network allowlist proxy.
 - The TUI is readline-based: no diff view, no syntax highlighting, no multi-pane layout.
 - Gemini `thoughtSignature` on plain text parts is stored as an empty thinking block. That works, but it is not byte-for-byte what Gemini returned.
 - The text tool-call shim (used automatically when a model has `tools: false`, or with `compat.toolShim`) has been checked on qwen3:8b only. Weaker models may need a stricter output format.

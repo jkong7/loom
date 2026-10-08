@@ -166,7 +166,7 @@ Options
       --deny <rule>             deny rule
       --reasoning <level>       off | minimal | low | medium | high | xhigh | max
       --max-turns <n>           stop after n model turns
-      --sandbox                 run bash inside the macOS Seatbelt sandbox
+      --sandbox                 run bash in an OS sandbox (Seatbelt on macOS, bubblewrap on Linux)
       --no-memory               do not connect engram
       --no-mcp                  do not start MCP servers
       --append-system-prompt <t>

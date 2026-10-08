@@ -1,11 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import type { Tool } from '../agent/tool.ts';
 import { textResult } from '../agent/tool.ts';
 
 export interface SandboxConfig {
-  mode: 'off' | 'seatbelt';
+  mode: 'off' | 'seatbelt' | 'bwrap' | 'auto';
   network?: boolean;
   writable?: string[];
 }
@@ -31,10 +31,34 @@ export function seatbeltProfile(cwd: string, cfg: SandboxConfig): string {
   return lines.join('\n');
 }
 
+export function bwrapArgs(command: string, cwd: string, cfg: SandboxConfig): string[] {
+  const writable = [...new Set([cwd, tmpdir(), '/tmp', `${homedir()}/.cache`, ...(cfg.writable ?? [])].map(real))];
+  const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--die-with-parent'];
+  for (const d of writable) args.push('--bind-try', d, d);
+  if (!cfg.network) args.push('--unshare-net');
+  args.push('--chdir', cwd, '/bin/bash', '-c', command);
+  return args;
+}
+
+let bwrapPath: string | null | undefined;
+
+function findBwrap(): string | null {
+  if (bwrapPath !== undefined) return bwrapPath;
+  for (const p of ['/usr/bin/bwrap', '/usr/local/bin/bwrap']) if (existsSync(p)) return (bwrapPath = p);
+  return (bwrapPath = null);
+}
+
+export function resolveSandboxMode(cfg?: SandboxConfig): 'off' | 'seatbelt' | 'bwrap' {
+  if (!cfg || cfg.mode === 'off') return 'off';
+  if (cfg.mode === 'seatbelt' || (cfg.mode === 'auto' && process.platform === 'darwin')) return process.platform === 'darwin' ? 'seatbelt' : 'off';
+  if (cfg.mode === 'bwrap' || (cfg.mode === 'auto' && process.platform === 'linux')) return findBwrap() ? 'bwrap' : 'off';
+  return 'off';
+}
+
 export function wrapCommand(command: string, cwd: string, sandbox?: SandboxConfig): { file: string; args: string[] } {
-  if (sandbox?.mode === 'seatbelt' && process.platform === 'darwin') {
-    return { file: '/usr/bin/sandbox-exec', args: ['-p', seatbeltProfile(cwd, sandbox), '/bin/bash', '-c', command] };
-  }
+  const mode = resolveSandboxMode(sandbox);
+  if (mode === 'seatbelt') return { file: '/usr/bin/sandbox-exec', args: ['-p', seatbeltProfile(cwd, sandbox!), '/bin/bash', '-c', command] };
+  if (mode === 'bwrap') return { file: findBwrap()!, args: bwrapArgs(command, cwd, sandbox!) };
   return { file: '/bin/bash', args: ['-c', command] };
 }
 

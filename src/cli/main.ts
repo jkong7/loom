@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs, HELP, type CliArgs } from './args.ts';
 import { Runtime } from '../runtime.ts';
@@ -8,6 +7,7 @@ import { LoomServer, PermissionBroker } from '../server/http.ts';
 import { runRpc } from '../server/rpc.ts';
 import { EngramProvider, findEngramCli } from '../memory/engram.ts';
 import { findRipgrep } from '../tools/search.ts';
+import { resolveSandboxMode } from '../tools/bash.ts';
 import type { ReasoningLevel } from '../ai/types.ts';
 import type { LoomConfig } from '../config.ts';
 import type { Asker } from '../agent/permissions.ts';
@@ -24,7 +24,7 @@ async function readStdin(): Promise<string> {
 function overrides(a: CliArgs): LoomConfig {
   const o: LoomConfig = {};
   if (a.maxTurns) o.maxTurns = a.maxTurns;
-  if (a.sandbox) o.sandbox = { mode: 'seatbelt', network: true };
+  if (a.sandbox) o.sandbox = { mode: 'auto', network: true };
   if (a.systemAppend) o.systemPrompt = { append: a.systemAppend };
   if (a.allow.length || a.deny.length) o.permissions = { allow: a.allow, deny: a.deny };
   return o;
@@ -117,7 +117,7 @@ async function doctor(a: CliArgs): Promise<number> {
   const cli = findEngramCli();
   line(up || !!cli, `engram: daemon ${up ? `up at ${engram.opts.url}` : 'down'}, CLI ${cli ? cli.join(' ') : 'not found (set ENGRAM_BIN or put engram on PATH)'}`);
   line(!!findRipgrep(), `ripgrep: ${findRipgrep() ?? 'not found (grep falls back to a slower JS search)'}`);
-  line(process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'), `seatbelt sandbox: ${process.platform === 'darwin' ? 'available' : 'macOS only'}`);
+  line(resolveSandboxMode({ mode: 'auto' }) !== 'off', `sandbox: ${resolveSandboxMode({ mode: 'auto' })} (seatbelt on macOS, bubblewrap on Linux)`);
   for (const s of rt.mcp.status.values()) line(s.connected, `mcp ${s.name}: ${s.connected ? `${s.tools} tools` : s.error}`);
   line(true, `skills: ${rt.skills.map((s) => s.name).join(', ') || 'none'}; agents: ${rt.agentDefs.map((d) => d.name).join(', ')}`);
   for (const w of rt.warnings) line(false, w);

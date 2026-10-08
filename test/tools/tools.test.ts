@@ -105,3 +105,12 @@ test('write repairs content whose newlines arrived double-escaped', async () => 
   await writeTool.execute({ path: 'b.txt', content: 'one literal \\n is fine' }, ctx(dir));
   assert.equal(readFileSync(join(dir, 'b.txt'), 'utf8'), 'one literal \\n is fine');
 });
+
+test('bubblewrap arguments bind the cwd writable and the rest read only', async () => {
+  const { bwrapArgs } = await import('../../src/tools/bash.ts');
+  const args = bwrapArgs('echo hi', '/work/proj', { mode: 'bwrap', network: false });
+  assert.deepEqual(args.slice(0, 3), ['--ro-bind', '/', '/']);
+  assert.ok(args.join(' ').includes('--bind-try /work/proj /work/proj'));
+  assert.ok(args.includes('--unshare-net'));
+  assert.deepEqual(args.slice(-3), ['/bin/bash', '-c', 'echo hi']);
+});
