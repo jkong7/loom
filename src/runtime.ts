@@ -56,6 +56,7 @@ export class Runtime {
   readonly sessions: SessionStore;
   readonly mcp = new McpManager();
   readonly memoryProviders: MemoryProvider[] = [];
+  readonly memoryFactories: (() => MemoryProvider)[] = [];
   readonly pluginHost: PluginHost;
   skills: Skill[] = [];
   agentDefs: AgentDefinition[] = [];
@@ -134,7 +135,7 @@ export class Runtime {
 
     const mem = this.opts.memory;
     if (Array.isArray(mem)) this.memoryProviders.push(...mem);
-    else if (mem !== false && (this.config.memory?.provider ?? 'engram') === 'engram') this.memoryProviders.unshift(new EngramProvider({ harness: 'loom', ...this.config.memory?.engram }));
+    else if (mem !== false && (this.config.memory?.provider ?? 'engram') === 'engram') this.memoryFactories.push(() => new EngramProvider({ harness: 'loom', ...this.config.memory?.engram }));
   }
 
   resolveModel(spec?: string): Model {
@@ -181,7 +182,8 @@ export class Runtime {
         } catch {}
       }
     }
-    const memory = this.memoryProviders.length ? new MemoryManager(this.memoryProviders, { recall: this.config.memory?.recall !== false, onError: (p, phase, err) => this.warn(`memory ${p} ${phase}: ${(err as Error).message}`) }) : undefined;
+    const providers = [...this.memoryFactories.map((f) => f()), ...this.memoryProviders];
+    const memory = providers.length ? new MemoryManager(providers, { recall: this.config.memory?.recall !== false, onError: (p, phase, err) => this.warn(`memory ${p} ${phase}: ${(err as Error).message}`) }) : undefined;
     const small = this.config.smallModel ? this.resolveModel(this.config.smallModel) : undefined;
     const agent: Agent = new Agent({
       model,

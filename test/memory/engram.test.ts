@@ -159,3 +159,41 @@ test('real engram daemon and CLI fallback', { skip: !existsSync(ENGRAM_BIN) && '
     Object.assign(process.env, saved);
   }
 });
+
+test('each agent gets its own engram provider, so closing one session does not break the next', async () => {
+  const sessions: string[] = [];
+  const srv = await startServer((req, res) => {
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/healthz') return void res.end(JSON.stringify({ ok: true }));
+    if (req.url?.startsWith('/v1/hooks/loom/')) sessions.push(`${req.url.split('/').pop()}:${req.body.session_id}`);
+    if (req.url === '/v1/search') return void res.end(JSON.stringify({ memories: [{ id: 'm1', kind: 'fact', title: 't', body: 'found it' }] }));
+    if (req.url === '/mcp') {
+      res.statusCode = 404;
+      return void res.end('{}');
+    }
+    res.end('{}');
+  });
+  const { Runtime } = await import('../../src/runtime.ts');
+  const { ModelRegistry, MockScript, setMockScript } = await import('../../src/ai/index.ts');
+  const id = `engram-rt-${Date.now()}`;
+  setMockScript(id, new MockScript([{ text: 'a' }, { toolCalls: [{ name: 'memory_search', args: { query: 'x' } }] }, (ctx: Context) => ({ text: (ctx.messages.at(-1) as any).content[0].text })]));
+  const registry = new ModelRegistry();
+  registry.addModel({ provider: 'mock', id });
+  const home = tempDir();
+  const rt = await Runtime.create({ cwd: tempDir(), home: tempDir(), registry, model: `mock/${id}`, mcp: false, config: { memory: { provider: 'engram', engram: { url: srv.url, home, cli: [] as unknown as string[], toolTransport: 'rest' } } } });
+  try {
+    const a = await rt.createAgent();
+    await a.prompt('first session');
+    await a.close('switch');
+    const b = await rt.createAgent();
+    const r = await b.prompt('second session');
+    assert.match(r.text, /found it/);
+    await b.close('exit');
+    const ends = sessions.filter((s) => s.startsWith('SessionEnd:'));
+    assert.deepEqual(ends, [`SessionEnd:${a.session.id}`, `SessionEnd:${b.session.id}`]);
+    assert.ok(sessions.includes(`Stop:${b.session.id}`));
+  } finally {
+    await rt.close();
+    await srv.close();
+  }
+});
