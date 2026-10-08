@@ -9,6 +9,7 @@ import type { EngramOptions } from './memory/engram.ts';
 import type { CompactionSettings } from './agent/compaction.ts';
 import type { SandboxConfig } from './tools/bash.ts';
 import { findGitRoot } from './agent/instructions.ts';
+import type { TelemetryConfig } from './telemetry/otel.ts';
 
 export interface LoomConfig {
   model?: string;
@@ -33,6 +34,7 @@ export interface LoomConfig {
   systemPrompt?: { base?: string; append?: string };
   tools?: { disabled?: string[] };
   snapshots?: boolean;
+  telemetry?: TelemetryConfig;
 }
 
 export function loomHome(): string {

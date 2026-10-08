@@ -18,6 +18,7 @@ import { loadConfig, loomHome, type LoomConfig } from './config.ts';
 import { loadPlugins, pluginPaths, type Plugin, type PluginHost } from './plugins.ts';
 import { textOf } from './ai/types.ts';
 import { Snapshots } from './agent/snapshots.ts';
+import { Tracer } from './telemetry/otel.ts';
 
 export interface RuntimeOptions {
   cwd?: string;
@@ -31,6 +32,7 @@ export interface RuntimeOptions {
   plugins?: Plugin[];
   loadPlugins?: boolean;
   registry?: ModelRegistry;
+  tracer?: Tracer | false;
   onWarning?: (text: string) => void;
 }
 
@@ -64,6 +66,7 @@ export class Runtime {
   private opts: RuntimeOptions;
   private agents = new Set<Agent>();
   warnings: string[] = [];
+  readonly tracer?: Tracer;
 
   private constructor(opts: RuntimeOptions) {
     this.opts = opts;
@@ -98,6 +101,7 @@ export class Runtime {
     this.sessions = new SessionStore(join(this.home, 'sessions'));
     this.pluginHost = { tools: this.tools, hooks: this.hooks, registry: this.registry, memoryProviders: this.memoryProviders, systemPrompt: this.promptExtras, loaded: [], errors: [] };
     if (sandbox) this.sandbox = sandbox;
+    this.tracer = opts.tracer === false ? undefined : opts.tracer ?? Tracer.fromConfig(this.config.telemetry);
   }
 
   sandbox?: LoomConfig['sandbox'];
@@ -203,6 +207,7 @@ export class Runtime {
       agentContext: opts.agentContext ?? 'primary',
       services: { sandbox: this.sandbox, spawnSubagent: this.spawner(() => agent) },
       snapshots: this.config.snapshots === false ? undefined : new Snapshots(this.cwd, join(this.home, 'snapshots')),
+      tracer: this.tracer,
       ...opts.extra,
     });
     this.agents.add(agent);
@@ -230,6 +235,8 @@ export class Runtime {
         compaction: this.config.compaction,
         depth: o.depth,
         agentContext: 'subagent',
+        tracer: this.tracer,
+        agentName: def.name,
         services: { sandbox: this.sandbox, spawnSubagent: this.spawner(() => child) },
       });
       const forward = child.subscribe((e) => {
@@ -252,6 +259,7 @@ export class Runtime {
     this.agents.clear();
     await this.mcp.closeAll();
     killAllJobs();
+    await this.tracer?.flush();
   }
 }
 
