@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { JsonSchema, UserContent } from '../ai/types.ts';
 import { sseEvents } from '../ai/stream.ts';
+import { currentTraceparent, traceHeaders } from '../telemetry/context.ts';
 import { expandValue } from '../agent/hooks.ts';
 
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
@@ -114,7 +115,7 @@ class HttpTransport implements Transport {
     for (const [k, v] of Object.entries(this.cfg.headers ?? {})) h[k] = expandValue(v);
     if (this.sessionId) h['mcp-session-id'] = this.sessionId;
     if (this.protocolVersion) h['mcp-protocol-version'] = this.protocolVersion;
-    return h;
+    return { ...h, ...traceHeaders() };
   }
 
   async send(msg: { id?: number }): Promise<any | undefined> {
@@ -266,7 +267,8 @@ export class McpClient {
   }
 
   async callTool(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<McpCallResult> {
-    const r = await this.request('tools/call', { name, arguments: args }, this.config.timeoutMs ?? 120000, signal);
+    const tp = currentTraceparent();
+    const r = await this.request('tools/call', tp ? { name, arguments: args, _meta: { traceparent: tp } } : { name, arguments: args }, this.config.timeoutMs ?? 120000, signal);
     return { content: mapContent(r?.content ?? []), isError: !!r?.isError, structured: r?.structuredContent };
   }
 

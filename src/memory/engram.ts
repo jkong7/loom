@@ -8,6 +8,7 @@ import type { Tool } from '../agent/tool.ts';
 import { textResult } from '../agent/tool.ts';
 import { parseHookOutput, type HookEvent } from '../agent/hooks.ts';
 import { McpClient, type McpTool } from '../mcp/client.ts';
+import { traceHeaders } from '../telemetry/context.ts';
 import type { CompressEvent, MemoryProvider, MemorySessionInfo, MemoryStatus, TurnRecord } from './provider.ts';
 
 export interface EngramOptions {
@@ -123,7 +124,7 @@ export class EngramProvider implements MemoryProvider {
 
   private async rest(method: 'GET' | 'POST', path: string, body?: unknown, timeoutMs = this.opts.timeoutMs): Promise<any> {
     const f = this.opts.fetch ?? fetch;
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    const headers: Record<string, string> = { 'content-type': 'application/json', ...traceHeaders() };
     const tok = this.token();
     if (tok) headers.authorization = `Bearer ${tok}`;
     const res = await f(`${this.opts.url}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) });
