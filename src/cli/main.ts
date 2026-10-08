@@ -116,6 +116,12 @@ async function doctor(a: CliArgs): Promise<number> {
   const up = await engram.healthy();
   const cli = findEngramCli();
   line(up || !!cli, `engram: daemon ${up ? `up at ${engram.opts.url}` : 'down'}, CLI ${cli ? cli.join(' ') : 'not found (set ENGRAM_BIN or put engram on PATH)'}`);
+  if (rt.tracer) {
+    const st = rt.tracer.status();
+    const base = st.endpoint.replace(/\/v1\/traces$/, '');
+    const reach = await fetch(base, { method: 'GET', signal: AbortSignal.timeout(800) }).then(() => true, () => false);
+    line(reach, `telemetry: OTLP to ${st.endpoint} ${reach ? 'reachable' : 'not reachable'}, content capture ${st.captureContent ? 'on' : 'off'}`);
+  } else line(true, 'telemetry: off (set telemetry.endpoint or OTEL_EXPORTER_OTLP_ENDPOINT, e.g. http://127.0.0.1:4318 for blackbox)');
   line(!!findRipgrep(), `ripgrep: ${findRipgrep() ?? 'not found (grep falls back to a slower JS search)'}`);
   line(resolveSandboxMode({ mode: 'auto' }) !== 'off', `sandbox: ${resolveSandboxMode({ mode: 'auto' })} (seatbelt on macOS, bubblewrap on Linux)`);
   for (const s of rt.mcp.status.values()) line(s.connected, `mcp ${s.name}: ${s.connected ? `${s.tools} tools` : s.error}`);
