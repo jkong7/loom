@@ -136,11 +136,6 @@ export const grepTool: Tool<GrepArgs> = {
     } catch {
       return textResult(`Path not found: ${root}`, true);
     }
-    try {
-      new RegExp(a.pattern);
-    } catch (err) {
-      return textResult(`Invalid regex: ${(err as Error).message}`, true);
-    }
     const mode = a.output_mode ?? 'files_with_matches';
     const limit = a.head_limit ?? 250;
     let out: string;
@@ -156,9 +151,19 @@ export const grepTool: Tool<GrepArgs> = {
       if (a.glob) args.push('--glob', a.glob);
       args.push('-e', a.pattern, relative(ctx.cwd, root) || '.');
       const r = await run(rg, args, ctx.cwd, ctx.signal);
-      if (r.code === 2 && r.out.trim()) return textResult(`rg error: ${r.out.trim().slice(0, 1000)}`, true);
-      out = r.out;
-    } else out = await jsGrep(a, root, ctx.cwd);
+      const lines = r.out.split('\n');
+      const errors = lines.filter((l) => /^rg: /.test(l));
+      out = lines.filter((l) => !/^rg: /.test(l)).join('\n');
+      if (r.code === 2 && !out.trim()) return textResult(`rg error: ${errors.join('\n').slice(0, 1000) || r.out.trim().slice(0, 1000)}`, true);
+      if (errors.length) out += `\n[rg reported ${errors.length} error(s), e.g. ${errors[0].slice(0, 200)}]`;
+    } else {
+      try {
+        new RegExp(a.pattern);
+      } catch (err) {
+        return textResult(`Invalid regex: ${(err as Error).message}`, true);
+      }
+      out = await jsGrep(a, root, ctx.cwd);
+    }
     const lines = out.split('\n').filter(Boolean);
     if (!lines.length) return textResult('No matches.');
     const shown = lines.slice(0, limit);

@@ -99,9 +99,12 @@ test('html to text', () => {
 
 test('write repairs content whose newlines arrived double-escaped', async () => {
   const dir = tempDir();
-  const r = await writeTool.execute({ path: 'a.py', content: 'def f():\\n    return \\"x\\"\\n' }, ctx(dir));
-  assert.equal(readFileSync(join(dir, 'a.py'), 'utf8'), 'def f():\n    return "x"\n');
+  const r = await writeTool.execute({ path: 'a.py', content: 'def f():\\n    y = 1\\n    return \\"x\\"\\n' }, ctx(dir));
+  assert.equal(readFileSync(join(dir, 'a.py'), 'utf8'), 'def f():\n    y = 1\n    return "x"\n');
   assert.match(text(r), /escaped newlines/);
+  const json = '{"a":"x\\ny","b":"z\\nw","c":"\\n"}';
+  await writeTool.execute({ path: 'c.txt', content: json }, ctx(dir));
+  assert.equal(readFileSync(join(dir, 'c.txt'), 'utf8'), json);
   await writeTool.execute({ path: 'b.txt', content: 'one literal \\n is fine' }, ctx(dir));
   assert.equal(readFileSync(join(dir, 'b.txt'), 'utf8'), 'one literal \\n is fine');
 });

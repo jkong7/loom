@@ -94,10 +94,11 @@ export const readTool: Tool<{ path: string; offset?: number; limit?: number }> =
   },
 };
 
-export function repairEscapedContent(content: string): string {
+export function repairEscapedContent(content: string, path = ''): string {
   if (content.includes('\n')) return content;
+  if (/\.(json|jsonl|ndjson|csv|tsv)$/i.test(path) || /^\s*[[{"]/.test(content)) return content;
   const escaped = content.match(/\\n/g)?.length ?? 0;
-  if (escaped < 2) return content;
+  if (escaped < 3) return content;
   return content.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"');
 }
 
@@ -126,7 +127,7 @@ export const writeTool: Tool<{ path: string; content: string }> = {
         if (fingerprint(path) !== seen) return textResult(`${displayPath(path, ctx.cwd)} changed on disk since you read it. Read it again before overwriting.`, true);
       }
       mkdirSync(dirname(path), { recursive: true });
-      const content = repairEscapedContent(a.content);
+      const content = repairEscapedContent(a.content, path);
       writeFileSync(path, content);
       markRead(ctx, path);
       const lines = content.split('\n').length;
