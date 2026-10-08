@@ -141,6 +141,7 @@ export interface ModelCompat {
   thinkTags?: boolean;
   requiresToolResultName?: boolean;
   toolIdMaxLength?: number;
+  toolShim?: boolean;
 }
 
 export interface Model {

@@ -230,4 +230,4 @@ The suite covers:
 - The TUI is readline-based: no diff view, no syntax highlighting, no multi-pane layout.
 - There are no git snapshots for undo; rewind only moves the conversation.
 - Gemini `thoughtSignature` on plain text parts is stored as an empty thinking block. That works, but it is not byte-for-byte what Gemini returned.
-- Some local models emit tool calls as text instead of structured calls, and Goose-style tool-call parsing for those models is not built yet.
+- The text tool-call shim (used automatically when a model has `tools: false`, or with `compat.toolShim`) has been checked on qwen3:8b only. Weaker models may need a stricter output format.

@@ -4,6 +4,7 @@ import { streamOpenAIChat } from './providers/openai-chat.ts';
 import { streamOpenAIResponses } from './providers/openai-responses.ts';
 import { streamGoogle } from './providers/google.ts';
 import { streamMock } from './providers/mock.ts';
+import { needsShim, shimStream, toShimContext } from './toolshim.ts';
 
 const apis = new Map<string, StreamFn>([
   ['anthropic-messages', streamAnthropic],
@@ -195,6 +196,7 @@ export function stream(model: Model, context: Context, options: StreamOptions = 
       yield b.fail(new Error(`no API key for provider "${model.provider}": set ${env}`));
     })();
   }
+  if (needsShim(model, context)) return shimStream(fn(model, toShimContext(context), { ...options, apiKey }));
   return fn(model, context, { ...options, apiKey });
 }
 

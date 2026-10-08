@@ -8,3 +8,4 @@ export { buildAnthropicRequest, toAnthropicMessages } from './providers/anthropi
 export { buildChatRequest, toChatMessages } from './providers/openai-chat.ts';
 export { buildResponsesRequest, toResponsesInput } from './providers/openai-responses.ts';
 export { buildGeminiRequest, toGeminiContents } from './providers/google.ts';
+export { needsShim, toShimContext, shimStream, extractToolCalls } from './toolshim.ts';

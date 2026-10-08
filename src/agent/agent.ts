@@ -179,7 +179,7 @@ export class Agent {
       model: `${this.model.provider}/${this.model.id}`,
       memory: [memory, ...extra.map((x) => `<session-context>\n${x.trim()}\n</session-context>`)].filter(Boolean).join('\n\n') || null,
     });
-    this.toolSpecs = this.model.tools ? this.tools.specs() : [];
+    this.toolSpecs = this.tools.specs();
     this.systemTokens = estimateContextTokens({ system: this.system, messages: [], tools: this.toolSpecs });
   }
 
