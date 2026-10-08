@@ -142,6 +142,41 @@ The memory tools come from MCP over HTTP (`/mcp`) when it answers, otherwise `en
 
 Subagents get no memory tools and send no writes. Turn off memory with `--no-memory` or `"memory": {"provider": "none"}`.
 
+## Telemetry and blackbox
+
+loom exports OpenTelemetry traces over OTLP/HTTP JSON using the GenAI semantic conventions. Exporting needs no SDK, and it stays off until you set an endpoint. Any OTel backend works. [blackbox](../blackbox) is the one it is tested against.
+
+```
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 loom -p "fix the failing test"
+```
+
+or in config:
+
+```json
+"telemetry": { "endpoint": "http://127.0.0.1:4318", "project": "billing", "captureContent": true, "sampleRate": 1, "headers": { "x-api-key": "..." } }
+```
+
+Every prompt becomes one trace:
+
+```
+invoke_agent loom                    session.id, input/output, turns, end reason, totals
+├─ read_memory engram                (engram, digest)
+├─ search_memory prefetch            loom's recall step
+│  └─ search_memory engram           engram's gate: hits, ids, why
+├─ chat claude-sonnet-5-5            messages, tool definitions, tokens, cache, TTFT, finish reason
+├─ execute_tool bash                 arguments, result, error status
+├─ execute_tool memory_write
+│  └─ create_memory engram           engram's MCP handler, joined through params._meta.traceparent
+├─ execute_tool task
+│  └─ invoke_agent explore           subagents nest under the tool that spawned them
+└─ create_memory engram              turn capture (Stop hook)
+```
+
+- The active span lives in `AsyncLocalStorage`. Engram REST calls and HTTP MCP servers get a W3C `traceparent` header, and MCP `tools/call` requests carry it in `params._meta`. That lets engram, blackbox's MCP wrapper and any OTel-aware server attach their spans to loom's.
+- Content capture (prompts, messages, tool payloads) is on by default only for loopback endpoints. For anything remote, set `captureContent` or `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`.
+- Spans are batched (every 256 spans or 1 s), retried 3 times with backoff and capped in memory. A dead collector never slows down or fails a run. `loom doctor` shows whether the endpoint is reachable.
+- Standard variables: `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`, `OTEL_TRACES_SAMPLER_ARG` and `OTEL_SDK_DISABLED`, plus `LOOM_OTEL_ENDPOINT`, `LOOM_PROJECT` and `LOOM_TELEMETRY=off`.
+
 ## Tools, permissions and sandboxing
 
 Built-in tools are `read` (numbered lines, paging, images), `edit` (exact replace or several edits applied atomically; requires an earlier read and fails if the file changed on disk since), `write`, `bash` (timeouts, kills the whole process group, `run_in_background` together with `bash_output` and `bash_kill`), `grep` (ripgrep, with a JS fallback), `glob`, `fetch`, `task` (subagents) and `skill`, plus MCP and memory tools.
@@ -223,6 +258,8 @@ The suite covers:
 - the loop (parallel batching, hooks, steering, permissions, truncation, loop warnings, aborts, overflow recovery)
 - compaction and pruning, sessions (resume, rewind, fork) and instruction loading
 - the tools, including a real Seatbelt check, and MCP over stdio and HTTP
+- telemetry: the span tree, traceparent propagation into engram and tools, content capture off, error status, and a dead collector
+- the whole stack: a real engram daemon and a real blackbox server from sibling checkouts, with one distributed trace from loom's loop through engram recall and MCP writes (`test/e2e/stack.test.ts`, skipped when either checkout is missing)
 - the engram provider, three ways: against a fake daemon, with only the spool available, and against the real engram daemon and CLI from `~/dev/engram` (skipped when that checkout is missing)
 - skills, subagents, plugins, config layering, the HTTP server and RPC, and CLI processes
 - a real Ollama run (skipped when Ollama or the model is missing; `LOOM_OLLAMA_MODEL` overrides the default `qwen3:8b`)

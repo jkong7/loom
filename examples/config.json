@@ -32,5 +32,6 @@
     ]
   },
   "skills": { "paths": ["~/my-skills"] },
-  "plugins": ["./examples/plugin.ts"]
+  "plugins": ["./examples/plugin.ts"],
+  "telemetry": { "endpoint": "http://127.0.0.1:4318", "project": "my-repo", "captureContent": true, "sampleRate": 1 }
 }
