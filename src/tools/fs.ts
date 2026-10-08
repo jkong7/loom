@@ -94,6 +94,13 @@ export const readTool: Tool<{ path: string; offset?: number; limit?: number }> =
   },
 };
 
+export function repairEscapedContent(content: string): string {
+  if (content.includes('\n')) return content;
+  const escaped = content.match(/\\n/g)?.length ?? 0;
+  if (escaped < 2) return content;
+  return content.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"');
+}
+
 export const writeTool: Tool<{ path: string; content: string }> = {
   name: 'write',
   kind: 'edit',
@@ -119,10 +126,12 @@ export const writeTool: Tool<{ path: string; content: string }> = {
         if (fingerprint(path) !== seen) return textResult(`${displayPath(path, ctx.cwd)} changed on disk since you read it. Read it again before overwriting.`, true);
       }
       mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, a.content);
+      const content = repairEscapedContent(a.content);
+      writeFileSync(path, content);
       markRead(ctx, path);
-      const lines = a.content.split('\n').length;
-      return textResult(`${existed ? 'Overwrote' : 'Created'} ${displayPath(path, ctx.cwd)} (${lines} lines)`);
+      const lines = content.split('\n').length;
+      const note = content !== a.content ? ' Note: the content arrived with escaped newlines (\\n) and no real ones, so they were converted to real newlines.' : '';
+      return textResult(`${existed ? 'Overwrote' : 'Created'} ${displayPath(path, ctx.cwd)} (${lines} lines).${note}`);
     });
   },
 };

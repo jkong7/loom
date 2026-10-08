@@ -96,3 +96,12 @@ test('grep and glob find content and files, skipping node_modules', async () => 
 test('html to text', () => {
   assert.equal(htmlToText('<html><head><title>x</title></head><body><h1>Hi</h1><p>a &amp; b</p><script>x()</script></body></html>'), '# Hi\na & b');
 });
+
+test('write repairs content whose newlines arrived double-escaped', async () => {
+  const dir = tempDir();
+  const r = await writeTool.execute({ path: 'a.py', content: 'def f():\\n    return \\"x\\"\\n' }, ctx(dir));
+  assert.equal(readFileSync(join(dir, 'a.py'), 'utf8'), 'def f():\n    return "x"\n');
+  assert.match(text(r), /escaped newlines/);
+  await writeTool.execute({ path: 'b.txt', content: 'one literal \\n is fine' }, ctx(dir));
+  assert.equal(readFileSync(join(dir, 'b.txt'), 'utf8'), 'one literal \\n is fine');
+});
