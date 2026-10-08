@@ -124,6 +124,10 @@ export class Agent {
     return () => this.listeners.delete(fn);
   }
 
+  notify(level: 'info' | 'warn' | 'error', text: string): void {
+    this.emit({ type: 'notice', level, text });
+  }
+
   private emit(e: AgentEvent): void {
     for (const l of this.listeners) {
       try {
@@ -144,7 +148,7 @@ export class Agent {
       harness: this.opts.harness ?? 'loom',
       model: `${this.model.provider}/${this.model.id}`,
       agentContext: this.opts.agentContext ?? 'primary',
-      parentSessionId: this.session.header.parent_session,
+      parentSessionId: this.session.header.parent_session_id,
       source,
     };
   }

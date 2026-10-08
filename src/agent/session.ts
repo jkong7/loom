@@ -23,7 +23,7 @@ export interface SessionHeader {
   cwd: string;
   harness: string;
   model?: string;
-  parent_session?: string;
+  parent_session_id?: string;
   forked_from?: { session_id: string; entry_id: string; path: string };
   title?: string;
   agent?: string;
@@ -92,7 +92,7 @@ export interface SessionSummary {
   updated: string;
   messages: number;
   model?: string;
-  parent_session?: string;
+  parent_session_id?: string;
 }
 
 export const PRUNED_MARKER = '[tool output pruned from context to save space; rerun the tool if you still need it]';
@@ -128,7 +128,7 @@ export class Session {
     const ts = nowIso();
     const dir = join(opts.root, encodeCwd(opts.cwd));
     const path = join(dir, `${ts.replace(/[:.]/g, '-')}_${id}.jsonl`);
-    const header: SessionHeader = { type: 'session', v: SESSION_VERSION, id, session_id: id, ts, cwd: opts.cwd, harness: opts.harness ?? 'loom', model: opts.model, parent_session: opts.parentSession, agent: opts.agent };
+    const header: SessionHeader = { type: 'session', v: SESSION_VERSION, id, session_id: id, ts, cwd: opts.cwd, harness: opts.harness ?? 'loom', model: opts.model, parent_session_id: opts.parentSession, agent: opts.agent };
     const s = new Session(path, header, opts.persist !== false);
     if (s.persist) {
       mkdirSync(dir, { recursive: true });
@@ -336,7 +336,7 @@ export class Session {
       updated: this.entries.length ? this.entries[this.entries.length - 1].ts : this.header.ts,
       messages: msgs.length,
       model: this.lastModel(),
-      parent_session: this.header.parent_session,
+      parent_session_id: this.header.parent_session_id,
     };
   }
 }
@@ -378,7 +378,7 @@ export class SessionStore {
     for (const f of this.files(cwd)) {
       try {
         const s = Session.open(f);
-        if (s.header.parent_session) continue;
+        if (s.header.parent_session_id) continue;
         out.push(s.summary());
       } catch {}
       if (out.length >= limit) break;
@@ -396,7 +396,7 @@ export class SessionStore {
     for (const f of this.files(cwd)) {
       try {
         const s = Session.open(f);
-        if (!s.header.parent_session) return s;
+        if (!s.header.parent_session_id) return s;
       } catch {}
     }
     return undefined;
