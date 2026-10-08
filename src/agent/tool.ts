@@ -26,7 +26,7 @@ export interface ToolContext {
 }
 
 export interface ToolServices {
-  readFiles: Map<string, number>;
+  readFiles: Map<string, string>;
   outputDir?: string;
   [key: string]: unknown;
 }
